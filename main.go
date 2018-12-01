@@ -12,6 +12,7 @@ import (
 	"github.com/buchgr/bazel-remote/cache"
 	"github.com/buchgr/bazel-remote/cache/disk"
 	"github.com/buchgr/bazel-remote/cache/gcs"
+	"github.com/buchgr/bazel-remote/cache/null"
 
 	cachehttp "github.com/buchgr/bazel-remote/cache/http"
 
@@ -19,6 +20,8 @@ import (
 	"github.com/buchgr/bazel-remote/server"
 	"github.com/urfave/cli"
 )
+
+const debug = true
 
 func main() {
 	app := cli.NewApp()
@@ -81,6 +84,16 @@ func main() {
 			Usage:  "Path to a pem encoded key file.",
 			EnvVar: "BAZEL_REMOTE_TLS_KEY_FILE",
 		},
+		cli.BoolFlag{
+			Name:   "devnull",
+			Usage:  "Skip storing.",
+			EnvVar: "BAZEL_REMOTE_DEVNULL",
+		},
+		cli.BoolFlag{
+			Name:   "debug",
+			Usage:  "Skip storing, print diagnostic info.",
+			EnvVar: "BAZEL_REMOTE_DEBUG",
+		},
 	}
 
 	app.Action = func(ctx *cli.Context) error {
@@ -108,6 +121,11 @@ func main() {
 		accessLogger := log.New(os.Stdout, "", log.Ldate|log.Ltime|log.LUTC)
 		errorLogger := log.New(os.Stderr, "", log.Ldate|log.Ltime|log.LUTC)
 
+		nullCache := &null.Cache{
+			Max: int64(c.MaxSize) * 1024 * 1024 * 1024,
+			Log: accessLogger,
+		}
+
 		diskCache := disk.New(c.Dir, int64(c.MaxSize)*1024*1024*1024)
 
 		var proxyCache cache.Cache
@@ -126,6 +144,8 @@ func main() {
 			}
 			proxyCache = cachehttp.New(baseURL, diskCache,
 				httpClient, accessLogger, errorLogger)
+		} else if debug {
+			proxyCache = nullCache
 		} else {
 			proxyCache = diskCache
 		}
